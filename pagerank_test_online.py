@@ -12,7 +12,7 @@ agent_init_fn = ConsensusAgent
 
 ### Setup
 P = pagerank_method.pagerank_find_P(env)
-experiences = P*2000
+experiences = P*500
 # P = experiences / np.sum(experiences, (1))[:, np.newaxis, :]
 
 pagerank_policy = pagerank_method.optimize_pagerank(P,env)
@@ -33,7 +33,7 @@ neutral_policy = pagerank_policy*0 + 1./n_opinions
 mean_steps_list = []
 n_gens = 26
 n_episodes_per_gen = 100
-plot_env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=True)
+#plot_env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=True)
 randomness = 0.1
 episodes_done = []
 for i in range(n_gens):
@@ -56,8 +56,8 @@ for i in range(n_gens):
     P = experiences / np.sum(experiences,(1))[:, np.newaxis, :]
     pagerank_policy = pagerank_method.optimize_pagerank(P, env)
     print(np.mean(steps_list))
-    if np.mean(steps_list)<500 and i%5 == 0:
-        run_episode(plot_env, agent_init_fn, policy=policy, return_details=True)
+    #if np.mean(steps_list)<500 and i%5 == 0:
+    #    run_episode(plot_env, agent_init_fn, policy=policy, return_details=True)
 
 plt.figure()
 plt.plot(episodes_done, mean_steps_list)

@@ -32,6 +32,8 @@ def run_episode(env, agent_init_fn, policy=None, return_details=False):
     if return_details:
         joint_observation = env.get_joint_observation()
         for id, agent in agents.items():
+            agent.select_action(joint_observation[id])[0]
+        for id, agent in agents.items():
             observations[id].append(joint_observation[id])
         return steps, observations, actions
     return steps
