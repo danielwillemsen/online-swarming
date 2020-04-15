@@ -22,6 +22,61 @@ class PermanentAgentStorage:
             self.next_agent = 1
         return agent
 
+class QLearningConsensusAgent:
+    """
+    A consensus agent that adapts its behaviour based on local experiences.
+    """
+    def __init__(self, observation_list, experiences, policy=None, n_actions=3, env=None):
+        self.env = env
+        self.experiences = experiences
+        self.policy = policy
+        self.Q = np.zeros((len(observation_list),n_actions))+0
+        self.r = pagerank_method.extract_localized_rewards(env)
+        self.observation_list = observation_list
+        self.observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
+        self.n_actions = n_actions
+        self.last_observation = None
+        self.last_action = None
+        self.discount = 0.95
+        self.alpha = 0.05
+        if not np.any(self.policy):
+            self.update_policy()
+
+    def init_equal_policy(self):
+        self.policy = np.zeros((len(self.observation_list), self.n_actions)) + 1./self.n_actions
+
+    def select_action(self, observation):
+        observation_idx = self.observation_dict[observation]
+        if self.last_action and self.last_observation:
+            self.Q[self.last_observation, self.last_action] = \
+                self.Q[self.last_observation, self.last_action] + \
+                self.alpha * (self.r[observation_idx,0]
+                              + self.discount * np.max(self.Q[observation_idx, :])
+                              - self.Q[self.last_observation, self.last_action])
+        if np.random.random() < 0.1:
+            action = random.choices([i for i in range(self.n_actions)])
+        else:
+            action = [np.argmax(self.Q[observation_idx,:])]
+
+        self.last_action = action
+        self.last_observation = observation_idx
+
+        return action
+
+    def new_episode(self):
+        self.last_observation = None
+        self.last_action = None
+        # 10% chance of updating policy
+        #if np.random.rand(1)<0.005:
+        #    self.update_policy()
+
+    def update_policy(self):
+        randomness = 0.02
+        P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
+        pagerank_policy = pagerank_method.optimize_value_iteration(P, self.env)
+        policy = (1 - randomness) * pagerank_policy + (randomness) * (pagerank_policy * 0 + 1. / self.env.n_opinions)
+        self.policy = policy / np.sum(policy, 1)[:, np.newaxis]
+        # self.policy = 0.9*self.policy + 0.1*policy
 
 class LearningConsensusAgent:
     """
@@ -65,7 +120,7 @@ class LearningConsensusAgent:
     def update_policy(self):
         randomness = 0.1
         P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
-        pagerank_policy = pagerank_method.optimize_pagerank(P, self.env)
+        pagerank_policy = pagerank_method.optimize_value_iteration(P, self.env)
         policy = (1 - randomness) * pagerank_policy + (randomness) * (pagerank_policy * 0 + 1. / self.env.n_opinions)
         self.policy = policy / np.sum(policy, 1)[:, np.newaxis]
         # self.policy = 0.9*self.policy + 0.1*policy

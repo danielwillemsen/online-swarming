@@ -12,10 +12,10 @@ agent_init_fn = ConsensusAgent
 
 ### Setup
 P = pagerank_method.pagerank_find_P(env)
-experiences = P*500
+experiences = P*1000
 # P = experiences / np.sum(experiences, (1))[:, np.newaxis, :]
 
-pagerank_policy = pagerank_method.optimize_pagerank(P,env)
+pagerank_policy = pagerank_method.optimize_value_iteration(P,env)
 
 observation_list = env.observation_list
 observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
@@ -54,7 +54,7 @@ for i in range(n_gens):
                 experiences[observation_dict[o_t], observation_dict[o_t1], a] += 1.0
     mean_steps_list.append(np.mean(steps_list))
     P = experiences / np.sum(experiences,(1))[:, np.newaxis, :]
-    pagerank_policy = pagerank_method.optimize_pagerank(P, env)
+    pagerank_policy = pagerank_method.optimize_value_iteration(P, env)
     print(np.mean(steps_list))
     #if np.mean(steps_list)<500 and i%5 == 0:
     #    run_episode(plot_env, agent_init_fn, policy=policy, return_details=True)
