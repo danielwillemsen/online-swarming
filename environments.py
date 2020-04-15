@@ -9,6 +9,8 @@ import pygame
 from celluloid import Camera
 matplotlib.use('TkAgg')
 COLORS = ["r", "g", "b"]
+BLACK = (0,0,0)
+WHITE = (255,255,255)
 
 class PatternEnvironment:
     def __init__(self, n_agents=8, draw=False):
@@ -21,18 +23,48 @@ class PatternEnvironment:
         self.observation_list = []
         self.create_observation_list()
         self.agent_ids = [i for i in range(1, self.n_agents+1)]
-
+        self.pattern = np.array([[1, 1], [1, 1]])
         self.fig = None
         self.ax = None
         if self.draw:
-            plt.ion()
-            self.fig = plt.figure()
-            self.ax = self.fig.add_subplot(111)
-            self.ax.set_xlim(0, self.size_grid[1])
-            self.ax.set_ylim(0, self.size_grid[0])
-            self.ax.grid()
-            plt.show()
+            pygame.init()
+            self.gameDisplay = pygame.display.set_mode((800, 600))
         self.reset()
+
+    def check_desired_pattern(self):
+        shape = np.shape(self.pattern)
+        occupancy_grid = self.grid > 0
+        for y in range(0,self.size_grid[0] - shape[0] + 1):
+            for x in range(0, self.size_grid[1] - shape[1] + 1):
+                if np.all(occupancy_grid[y:shape[0]+y, x:shape[0]+x] == self.pattern):
+                    return True
+        return False
+
+    def get_desired_observations(self):
+        shape = np.shape(self.pattern)
+        observations = []
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                if self.pattern[i,j]:
+                    grid_around = np.zeros((3, 3))
+                    down, up, left, right = 0, 0, 0, 0
+                    if i == shape[0] - 1:
+                        down = 1
+                    if i == 0:
+                        up = 1
+                    if j == shape[1] - 1:
+                        right = 1
+                    if j == 0:
+                        left = 1
+                    grid_around[0 + down:3 - up, 0 + right:3 - left] = self.pattern[
+                                                                       max(i - 1, 0):min(i + 2,
+                                                                                                   shape[0]),
+                                                                       max(j - 1, 0):min(j + 2,
+                                                                                                   shape[1])]
+                    grid_around = (grid_around.ravel() > 0).astype(int).tolist()
+                    del grid_around[4]
+                    observations.append(tuple(grid_around))
+        return observations
 
     def create_observation_list(self):
         self.observation_list = [seq for seq in itertools.product([i for i in range(1+1)], repeat=self.n_neighbors_max)
@@ -60,13 +92,8 @@ class PatternEnvironment:
         return observation
 
     def is_terminal(self):
-        opinion = self.opinions[1]
-        for opinion2 in self.opinions.values():
-            if opinion2 != opinion:
-                return False
-        if self.draw:
-            plt.close()
-        return True
+        return self.check_desired_pattern()
+
 
     def reset(self):
         self.grid = np.zeros(self.size_grid, dtype=int)
@@ -112,18 +139,13 @@ class PatternEnvironment:
                 self.grid = np.roll(self.grid, -1, axis=1)
                 location = np.where(self.grid == active_agent)
                 location = (int(location[0]), int(location[1]))
+            safe = True
             if self.grid[location[0], location[1] + 1] == 0:
                 self.grid[location] = 0
                 self.grid[location[0], location[1] + 1] = active_agent
                 grid_around = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
-                safe = True
-                if grid_around.size == 9:
-                    if grid_around[0,0] and not (grid_around[0,1] or (grid_around[1,0] and sum(grid_around[:,1]))):
-                        safe = False
-                    if grid_around[1,0] and not sum(grid_around[:,1]):
-                        safe = False
-                    if grid_around[2,0] and not (grid_around[2,1] or (grid_around[1,0] and sum(grid_around[:,1]))):
-                        safe = False
+                safe = self.check_safe(active_agent, grid_around)
+
                 if not safe:
                     self.grid[location] = active_agent
                     self.grid[location[0], location[1] + 1] = 0
@@ -132,19 +154,14 @@ class PatternEnvironment:
                 self.grid = np.roll(self.grid, -1, axis=0)
                 location = np.where(self.grid == active_agent)
                 location = (int(location[0]), int(location[1]))
+            safe = True
             if self.grid[location[0] + 1, location[1]] == 0:
                 self.grid[location] = 0
                 self.grid[location[0]+ 1, location[1] ] = active_agent
                 grid_around_temp = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
-                safe = True
-                grid_around = np.rot90(grid_around_temp, -1)
-                if grid_around.size == 9:
-                    if grid_around[0,0] and not (grid_around[0,1] or (grid_around[1,0] and sum(grid_around[:,1]))):
-                        safe = False
-                    if grid_around[1,0] and not sum(grid_around[:,1]):
-                        safe = False
-                    if grid_around[2,0] and not (grid_around[2,1] or (grid_around[1,0] and sum(grid_around[:,1]))):
-                        safe = False
+                grid_around = np.rot90(grid_around_temp, 1)
+                safe = self.check_safe(active_agent, grid_around)
+
                 if not safe:
                     self.grid[location] = active_agent
                     self.grid[location[0] + 1, location[1]] = 0
@@ -153,19 +170,15 @@ class PatternEnvironment:
                 self.grid = np.roll(self.grid, 1, axis=1)
                 location = np.where(self.grid == active_agent)
                 location = (int(location[0]), int(location[1]))
+            safe = True
             if self.grid[location[0], location[1] -1] == 0:
                 self.grid[location] = 0
                 self.grid[location[0], location[1] - 1] = active_agent
                 grid_around_temp = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
                 safe = True
                 grid_around = np.rot90(grid_around_temp, -2)
-                if grid_around.size == 9:
-                    if grid_around[0,0] and not (grid_around[0,1] or (grid_around[1,0] and sum(grid_around[:,1]))):
-                        safe = False
-                    if grid_around[1,0] and not sum(grid_around[:,1]):
-                        safe = False
-                    if grid_around[2,0] and not (grid_around[2,1] or (grid_around[1,0] and sum(grid_around[:,1]))):
-                        safe = False
+                safe = self.check_safe(active_agent, grid_around)
+
                 if not safe:
                     self.grid[location] = active_agent
                     self.grid[location[0], location[1] - 1] = 0
@@ -180,15 +193,8 @@ class PatternEnvironment:
                 self.grid[location[0] - 1, location[1]] = active_agent
                 grid_around_temp = self.grid[max(location[0] - 1, 0):min(location[0] + 2, self.size_grid[0]),
                                    max(location[1] - 1, 0):min(location[1] + 2, self.size_grid[1])]
-                safe = True
-                grid_around = np.rot90(grid_around_temp, -3)
-                if grid_around.size == 9:
-                    if grid_around[0, 0] and not (grid_around[0, 1] or (grid_around[1, 0] and sum(grid_around[:, 1]))):
-                        safe = False
-                    if grid_around[1, 0] and not sum(grid_around[:, 1]):
-                        safe = False
-                    if grid_around[2, 0] and not (grid_around[2, 1] or (grid_around[1, 0] and sum(grid_around[:, 1]))):
-                        safe = False
+                grid_around = np.rot90(grid_around_temp, -1)
+                safe = self.check_safe(active_agent, grid_around)
                 if not safe:
                     self.grid[location] = active_agent
                     self.grid[location[0] - 1, location[1]] = 0
@@ -197,16 +203,31 @@ class PatternEnvironment:
             self.update_plot()
         return self.get_joint_observation()
 
+    def check_safe(self, active_agent, grid_around):
+        safe = True
+        if grid_around.size == 9:
+            if np.sum(grid_around[:, 1:3]) == active_agent:
+                safe = False
+            if grid_around[0, 0] and not (grid_around[0, 1] or (grid_around[1, 0] and sum(grid_around[:, 1]))):
+                safe = False
+            if grid_around[1, 0] and not sum(grid_around[:, 1]):
+                safe = False
+            if grid_around[2, 0] and not (grid_around[2, 1] or (grid_around[1, 0] and sum(grid_around[:, 1]))):
+                safe = False
+        if grid_around.size == 6:
+            if sum(grid_around[:, 0]) and not sum(grid_around[:, 1]):
+                safe = False
+        return safe
+
     def update_plot(self):
-        self.ax.clear()
-        self.ax.grid()
+        self.gameDisplay.fill(WHITE)
         for agent in self.agent_ids:
             location = np.where(self.grid == agent)
-            location = (int(location[0]), int(location[1]))
+            location = (int(location[0])*50, int(location[1])*50)
+            pygame.draw.circle(self.gameDisplay, BLACK, location, 25)
             color = COLORS[0]
             self.ax.scatter(location[0], location[1], color=color, s=500)
-        plt.pause(0.01)
-
+        pygame.display.update()
 
 class ConsensusEnvironment:
     def __init__(self, n_agents=5, n_opinions=3, draw=False):
@@ -319,10 +340,14 @@ class ConsensusEnvironment:
         plt.pause(0.01)
 
 if __name__ == "__main__":
-    env = PatternEnvironment(draw=True)
+    env = PatternEnvironment(n_agents=4, draw=False)
+    a = env.get_desired_observations()
+
     while True:
         joint_action = {}
         for i in range(1,8+1):
             action = random.randint(0,3)
             joint_action[i] = action
         env.step(joint_action)
+        if env.is_terminal():
+            break
