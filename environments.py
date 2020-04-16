@@ -5,16 +5,21 @@ import itertools
 import random
 import agents
 import pygame
-
+import time
 from celluloid import Camera
 matplotlib.use('TkAgg')
 COLORS = ["r", "g", "b"]
 BLACK = (0,0,0)
 WHITE = (255,255,255)
-
+GREEN = (0,255,0)
 class PatternEnvironment:
-    def __init__(self, n_agents=8, draw=False):
-        self.n_agents = n_agents
+    def __init__(self, type="square", size=2, draw=False):
+        self.type = type
+        self.size = size
+        self.pattern = None
+        self.n_agents = None
+        self.setup_pattern()
+        self.n_opinions = 5
         self.n_neighbors_max = 8
         self.draw = draw
         self.size_grid = (self.n_agents + 1, self.n_agents + 1)
@@ -23,12 +28,12 @@ class PatternEnvironment:
         self.observation_list = []
         self.create_observation_list()
         self.agent_ids = [i for i in range(1, self.n_agents+1)]
-        self.pattern = np.array([[1, 1], [1, 1]])
         self.fig = None
         self.ax = None
         if self.draw:
             pygame.init()
             self.gameDisplay = pygame.display.set_mode((800, 600))
+            self.gameDisplay.fill(WHITE)
         self.reset()
 
     def check_desired_pattern(self):
@@ -36,7 +41,7 @@ class PatternEnvironment:
         occupancy_grid = self.grid > 0
         for y in range(0,self.size_grid[0] - shape[0] + 1):
             for x in range(0, self.size_grid[1] - shape[1] + 1):
-                if np.all(occupancy_grid[y:shape[0]+y, x:shape[0]+x] == self.pattern):
+                if np.all(occupancy_grid[y:shape[0]+y, x:shape[1]+x] == self.pattern):
                     return True
         return False
 
@@ -85,27 +90,21 @@ class PatternEnvironment:
                 right = 1
             if location[1] == 0:
                 left = 1
-            grid_around[0+down:3-up,0+right:3-left] = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
+            grid_around[0+up:3-down,0+left:3-right] = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
             grid_around = (grid_around.ravel() > 0).astype(int).tolist()
             del grid_around[4]
             observation[agent_id] = tuple(grid_around)
         return observation
 
     def is_terminal(self):
-        return self.check_desired_pattern()
+        return False
+        # return self.check_desired_pattern()
 
 
     def reset(self):
         self.grid = np.zeros(self.size_grid, dtype=int)
         self.grid_flat = self.grid.ravel()
         self.opinions = dict()
-        if self.draw:
-            self.fig = plt.figure()
-            self.ax = self.fig.add_subplot(111)
-            self.ax.set_xlim(0, self.size_grid[1])
-            self.ax.set_ylim(0, self.size_grid[0])
-            self.ax.grid()
-            plt.show()
         for agent in self.agent_ids:
             placed = False
             empty_indices = np.flatnonzero(self.grid_flat == 0)
@@ -134,6 +133,8 @@ class PatternEnvironment:
         action = joint_action[active_agent]
         location = np.where(self.grid == active_agent)
         location = (int(location[0]), int(location[1]))
+        if self.draw:
+            self.update_plot(active_agent=active_agent)
         if action == 0: # Right
             if location[1] == self.size_grid[1]-1:
                 self.grid = np.roll(self.grid, -1, axis=1)
@@ -198,6 +199,8 @@ class PatternEnvironment:
                 if not safe:
                     self.grid[location] = active_agent
                     self.grid[location[0] - 1, location[1]] = 0
+        if action == 4:     # Do nothing!
+            pass
         self.grid_flat = self.grid.ravel()
         if self.draw:
             self.update_plot()
@@ -219,15 +222,38 @@ class PatternEnvironment:
                 safe = False
         return safe
 
-    def update_plot(self):
+    def update_plot(self, active_agent=None):
         self.gameDisplay.fill(WHITE)
+        if self.check_desired_pattern():
+            color = GREEN
+            sleep = True
+        else:
+            sleep = False
+            color = BLACK
         for agent in self.agent_ids:
+
             location = np.where(self.grid == agent)
-            location = (int(location[0])*50, int(location[1])*50)
-            pygame.draw.circle(self.gameDisplay, BLACK, location, 25)
-            color = COLORS[0]
-            self.ax.scatter(location[0], location[1], color=color, s=500)
+            location = (int(location[1])*50, int(location[0])*50)
+            if agent == active_agent:
+                pygame.draw.circle(self.gameDisplay, GREEN, location, 25)
+            else:
+                pygame.draw.circle(self.gameDisplay, color, location, 25)
+
         pygame.display.update()
+        if sleep:
+            time.sleep(0.2)
+
+    def setup_pattern(self):
+        if self.type == "square":
+            self.pattern = np.ones((self.size,self.size))
+            self.n_agents = self.size*self.size
+        elif self.type == "triangle":
+            if self.size == 3:
+                self.n_agents = 4
+                self.pattern = np.array([[0,1,0],[1,1,1]])
+            if self.size == 5:
+                self.n_agents = 9
+                self.pattern = np.array([[0,0,1,0,0],[0,1,1,1,0],[1,1,1,1,1]])
 
 class ConsensusEnvironment:
     def __init__(self, n_agents=5, n_opinions=3, draw=False):
@@ -254,6 +280,19 @@ class ConsensusEnvironment:
             self.ax.grid()
             plt.show()
         self.reset()
+
+    def get_desired_observations(self):
+        observation_dict = {observation: idx for idx, observation in enumerate(self.observation_list)}
+        n_observations = len(self.observation_list)
+        s_des = []
+        r = np.zeros((n_observations, self.n_opinions))
+        for s1, s1_idx in observation_dict.items():
+            arr = np.array(s1[1])
+            if sum(arr > 0) == 1:
+                if np.where(arr > 0)[0] == s1[0]:
+                    s_des.append(s1)
+                    r[s1_idx, :] = 1.0
+        return s_des
 
     def create_observation_list(self):
         self.observation_list = []
@@ -340,14 +379,10 @@ class ConsensusEnvironment:
         plt.pause(0.01)
 
 if __name__ == "__main__":
-    env = PatternEnvironment(n_agents=4, draw=False)
-    a = env.get_desired_observations()
-
-    while True:
-        joint_action = {}
-        for i in range(1,8+1):
-            action = random.randint(0,3)
-            joint_action[i] = action
-        env.step(joint_action)
-        if env.is_terminal():
-            break
+    env = PatternEnvironment(type="triangle",size=3,draw=True)
+    env.grid = env.grid*0
+    env.grid[0:2,0:3] = np.array([[1,0,0],[2,3,4]])
+    env.grid_flat = env.grid.ravel()
+    env.update_plot()
+    joint_action = {1:0, 2:0, 3:0, 4:0}
+    env.step(joint_action)

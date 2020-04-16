@@ -31,6 +31,20 @@ def optimize_value_iteration(P, env):
     policy[np.arange(policy_ind.size),policy_ind] = 1.0
     return policy
 
+def optimize_value_iteration_values(P, env):
+    r = extract_localized_rewards(env)
+
+    # P is (s_old, s_new, action)
+    # for mdp is (a, sold, snew)
+    transition = np.swapaxes(P, 0, 2)
+    transition = np.swapaxes(transition, 1, 2)
+    t1 = time.time()
+    mdp = mdptoolbox.mdp.PolicyIteration(transitions=transition, reward=r, discount=0.99, max_iter=50)
+    mdp.run()
+    if mdp.iter == 50:
+        print("Max policy-iterations reached:" + str(mdp.iter))
+    policy_ind = np.array(mdp.V)
+    return policy_ind
 
 def extract_localized_rewards(env):
     n_opinions = env.n_opinions
