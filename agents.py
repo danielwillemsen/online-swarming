@@ -28,7 +28,7 @@ class DynaQLearningConsensusAgent:
     """
     def __init__(self, observation_list, experiences, policy=None, n_actions=3, env=None):
         self.env = env
-        self.experiences = experiences
+        self.experiences = np.copy(experiences)
         self.policy = policy
         self.Q = np.zeros((len(observation_list),n_actions))+0
 
@@ -47,7 +47,7 @@ class DynaQLearningConsensusAgent:
         self.n_actions = n_actions
         self.last_observation = None
         self.last_action = None
-        self.discount = 0.95
+        self.discount = 0.98
         self.alpha = 0.05
         if not np.any(self.policy):
             self.init_equal_policy()
@@ -65,7 +65,7 @@ class DynaQLearningConsensusAgent:
                 self.alpha * (self.r[observation_idx,0]
                               + self.discount * np.max(self.Q[observation_idx, :])
                               - self.Q[self.last_observation, self.last_action])
-        if np.random.random() < 0.10:
+        if np.random.random() < 0.1:
             action = random.choices([i for i in range(self.n_actions)])
         else:
             choices = np.ravel(np.argwhere(self.Q[observation_idx, :] == np.max(self.Q[observation_idx, :])))
@@ -74,11 +74,14 @@ class DynaQLearningConsensusAgent:
         if self.last_action and self.last_observation:
             self.experiences[self.last_observation, observation_idx, self.last_action] += 1
         if self.last_observation:
-            self.encountered.add(self.last_observation)
+            self.encountered.add((self.last_observation, self.last_action[0]))
         self.last_action = action
         self.last_observation = observation_idx
 
-        self.do_simulation_training()
+        #self.do_simulation_training()
+        self.do_simulation_training_par()
+        #self.do_simulation_training_par2()
+
         return action
 
     def do_simulation_training(self):
@@ -86,18 +89,14 @@ class DynaQLearningConsensusAgent:
         # P = np.nan_to_num(P)
         # if np.sum(P) == 0:
         #     return
-        k = 5
+        k = 10
         failed = 0
         if len(self.encountered)>0:
             for i in range(k):
-                last_state = random.choice(tuple(self.encountered))
-                if np.random.random() < 0.10:
-                    action = random.choices([i for i in range(self.n_actions)])
-                else:
-                    choices = np.ravel(np.argwhere(self.Q[last_state, :] == np.max(self.Q[last_state, :])))
-                    action = int(np.random.choice(choices))
+                last_state, action = random.choice(tuple(self.encountered))
+                action = [action]
                 if np.sum(self.experiences[last_state,:,action]) > 0:
-                    next_state = np.random.choice(len(self.observation_list),p=np.ravel(self.experiences[last_state,:,action]/np.sum(self.experiences[last_state,:,action])))
+                    next_state = random.choices([i for i in range(len(self.observation_list))], weights=np.squeeze(self.experiences[last_state,:,action]))#/np.sum(self.experiences[last_state,:,action])))
                     self.Q[last_state, action] = \
                         self.Q[last_state, action] + \
                         self.alpha * (self.r[next_state,0]
@@ -106,6 +105,210 @@ class DynaQLearningConsensusAgent:
                 else:
                     failed += 1
                     #print(failed)
+
+    def vectorized(self, prob_matrix, items):
+        s = prob_matrix.cumsum(axis=0)
+        r = np.random.rand(prob_matrix.shape[1])
+        k = (s < r).sum(axis=0)
+        return items[k]
+
+    def do_simulation_training_par(self):
+        # P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
+        # P = np.nan_to_num(P)
+        # if np.sum(P) == 0:
+        #     return
+        k = 50
+        failed = 0
+        if len(self.encountered)>0:
+            states_actions = random.choices(tuple(self.encountered), k=k)
+            states = []
+            actions = []
+            for item in states_actions:
+                states.append(item[0])
+                actions.append(item[1])
+
+            weights = self.experiences[states,:,actions]
+            weights = (weights / weights.sum(axis=1, keepdims=True)).T
+            possible_states = np.arange(len(self.observation_list))
+            next_states = self.vectorized(weights, possible_states)
+
+            self.Q[states, actions] = \
+                self.Q[states, actions] + \
+                self.alpha * (self.r[next_states, 0]
+                                + self.discount * np.max(self.Q[next_states, :], 1)
+                                - self.Q[states, actions])
+
+    def do_simulation_training_par2(self):
+        # P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
+        # P = np.nan_to_num(P)
+        # if np.sum(P) == 0:
+        #     return
+        k = 10
+        failed = 0
+        if len(self.encountered)>0:
+            states_actions = random.choices(tuple(self.encountered), k=k)
+            states = []
+            actions = []
+            for item in states_actions:
+                states.append(item[0])
+                actions.append(item[1])
+            weights = self.experiences[states,:,actions]
+            possible_states = [i for i in range(len(self.observation_list))]
+            next_states = [random.choices(possible_states, weights=weights[i])[0] for i in range(len(states))]
+            self.Q[states, actions] = \
+                self.Q[states, actions] + \
+                self.alpha * (self.r[next_states, 0]
+                                + self.discount * np.max(self.Q[next_states, :], 1)
+                                - self.Q[states, actions])
+
+    # def do_simulation_training(self):
+    #     P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
+    #     P = np.nan_to_num(P)
+    #     if np.sum(P) == 0:
+    #         return
+    #     k = 5
+    #     failed = 0
+    #     for i in range(k):
+    #         last_state = np.random.choice(len(P[:,0,0]),p=np.sum(P,(1,2))/np.sum(P))
+    #         if np.random.random() < 0.10:
+    #             action = random.choices([i for i in range(self.n_actions)])
+    #         else:
+    #             action = [np.argmax(self.Q[last_state,:])]
+    #         if np.sum(P[last_state,:,action]) > 0:
+    #             next_state = np.random.choice(len(self.observation_list),p=np.ravel(P[last_state,:,action]))
+    #             self.Q[last_state, action] = \
+    #                 self.Q[last_state, action] + \
+    #                 self.alpha * (self.r[next_state,0]
+    #                               + self.discount * np.max(self.Q[next_state, :])
+    #                               - self.Q[last_state, action])
+    #         else:
+    #             failed += 1
+    #             #print(failed)
+
+    def new_episode(self):
+        self.last_observation = None
+        self.last_action = None
+        # 10% chance of updating policy
+        #if np.random.rand(1)<0.005:
+        #    self.update_policy()
+
+
+class ExpDynaQLearningConsensusAgent:
+    """
+    A consensus agent that adapts its behaviour based on local experiences.
+    """
+    def __init__(self, observation_list, experiences, policy=None, n_actions=3, env=None):
+        self.env = env
+        self.experiences = np.copy(experiences)
+        self.policy = policy
+        self.Q = np.zeros((len(observation_list),n_actions))+0
+
+        self.observation_list = observation_list
+        self.observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
+        self.r = np.zeros((len(observation_list), n_actions))
+        for item in env.get_desired_observations():
+            self.r[self.observation_dict[item]] = 1
+#        self.Q = np.copy(self.r)
+        if np.any(policy):
+            for action in range(n_actions):
+                self.Q[:,action] = np.copy(policy)
+        if not np.any(self.experiences):
+           self.experiences = np.zeros((len(observation_list),len(observation_list),n_actions))
+        self.encountered = set()
+        self.n_actions = n_actions
+        self.last_observation = None
+        self.last_action = None
+        self.discount = 0.98
+        self.alpha = 0.05
+        if not np.any(self.policy):
+            self.init_equal_policy()
+
+    def init_equal_policy(self):
+        self.policy = np.zeros((len(self.observation_list), self.n_actions)) + 1./self.n_actions
+
+    def select_action(self, observation):
+        if np.max(self.r) >1.0:
+            print("Wtf")
+        observation_idx = self.observation_dict[observation]
+        if self.last_action and self.last_observation:
+            self.Q[self.last_observation, self.last_action] = \
+                self.Q[self.last_observation, self.last_action] + \
+                self.alpha * (self.r[observation_idx,0]
+                              + self.discount * np.max(self.Q[observation_idx, :])
+                              - self.Q[self.last_observation, self.last_action])
+        if np.random.random() < 0.1:
+            action = random.choices([i for i in range(self.n_actions)])
+        else:
+            choices = np.ravel(np.argwhere(self.Q[observation_idx, :] == np.max(self.Q[observation_idx, :])))
+            action = [int(np.random.choice(choices))]
+
+        if self.last_action and self.last_observation:
+            self.experiences[self.last_observation, observation_idx, self.last_action] += 1
+        if self.last_observation:
+            self.encountered.add((self.last_observation, self.last_action[0]))
+        self.last_action = action
+        self.last_observation = observation_idx
+
+        #self.do_simulation_training()
+        self.do_simulation_training_par()
+
+        return action
+
+    def vectorized(self, prob_matrix, items):
+        s = prob_matrix.cumsum(axis=0)
+        r = np.random.rand(prob_matrix.shape[1])
+        k = (s < r).sum(axis=0)
+        return items[k]
+
+    def do_simulation_training_par(self):
+        # P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
+        # P = np.nan_to_num(P)
+        # if np.sum(P) == 0:
+        #     return
+        k = 20
+        failed = 0
+        if len(self.encountered)>0:
+            states_actions = random.choices(tuple(self.encountered), k=k)
+            states = []
+            actions = []
+            for item in states_actions:
+                states.append(item[0])
+                actions.append(item[1])
+
+            weights = self.experiences[states,:,actions]
+            weights = (weights / weights.sum(axis=1, keepdims=True))
+
+            self.Q[states, actions] = \
+                self.Q[states, actions] + \
+                self.alpha * (weights @ self.r[:, 0]
+                                + self.discount * weights @ np.max(self.Q[:, :], 1)
+                                - self.Q[states, actions])
+
+    def do_simulation_training_par2(self):
+        # P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
+        # P = np.nan_to_num(P)
+        # if np.sum(P) == 0:
+        #     return
+        k = 50
+        failed = 0
+        if len(self.encountered)>0:
+            states_actions = random.choices(tuple(self.encountered), k=k)
+            states = []
+            actions = []
+            for item in states_actions:
+                states.append(item[0])
+                actions.append(item[1])
+
+            weights = self.experiences[states,:,actions]
+            weights = (weights / weights.sum(axis=1, keepdims=True)).T
+            possible_states = np.arange(len(self.observation_list))
+            next_states = self.vectorized(weights, possible_states)
+
+            self.Q[states, actions] = \
+                self.Q[states, actions] + \
+                self.alpha * (self.r[next_states, 0]
+                                + self.discount * np.max(self.Q[next_states, :], 1)
+                                - self.Q[states, actions])
 
     # def do_simulation_training(self):
     #     P = self.experiences / np.sum(self.experiences, (1))[:, np.newaxis, :]
@@ -160,7 +363,7 @@ class QLearningConsensusAgent:
         self.n_actions = n_actions
         self.last_observation = None
         self.last_action = None
-        self.discount = 0.95
+        self.discount = 0.98
         self.alpha = 0.05
         if not np.any(self.policy):
             self.init_equal_policy()

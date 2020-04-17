@@ -2,6 +2,7 @@ from environments import ConsensusEnvironment
 from agents import LearningConsensusAgent
 from agents import QLearningConsensusAgent
 from agents import DynaQLearningConsensusAgent
+from agents import ExpDynaQLearningConsensusAgent
 
 from environments import PatternEnvironment
 from agents import PermanentAgentStorage
@@ -24,7 +25,7 @@ experiences = []#P*2000
 # policy = None
 ### Setup
 
-agent_storage = PermanentAgentStorage(env, DynaQLearningConsensusAgent, experiences=None, policy=None)
+agent_storage = PermanentAgentStorage(env, ExpDynaQLearningConsensusAgent, experiences=None, policy=None)
 
 
 observation_list = env.observation_list

@@ -97,8 +97,7 @@ class PatternEnvironment:
         return observation
 
     def is_terminal(self):
-        return False
-        # return self.check_desired_pattern()
+        return self.check_desired_pattern()
 
 
     def reset(self):
@@ -241,7 +240,7 @@ class PatternEnvironment:
 
         pygame.display.update()
         if sleep:
-            time.sleep(0.2)
+            time.sleep(0.05)
 
     def setup_pattern(self):
         if self.type == "square":

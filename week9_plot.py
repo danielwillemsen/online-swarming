@@ -8,6 +8,8 @@ import numpy as np
 from agents import LearningConsensusAgent
 from agents import QLearningConsensusAgent
 from agents import DynaQLearningConsensusAgent
+from agents import ExpDynaQLearningConsensusAgent
+
 from agents import PermanentAgentStorage
 
 def moving_average(a, n=50) :
@@ -19,13 +21,13 @@ def moving_average(a, n=50) :
             b[i] = np.mean(a[0:i+1])
     return b
 
-n_agents = 10
-n_opinions = 2
+n_agents = 12
+n_opinions = 3
 
 randomness = 0.1
 n_tests_random = 5
 n_tests_pagerank = 100
-n_gens = 3
+n_gens = 8
 
 env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=False)
 agent_init_fn = ConsensusAgent
@@ -47,7 +49,7 @@ policy = pagerank_policy * (1 - randomness) + neutral_policy * randomness
 scores_pagerank = np.zeros(n_tests_pagerank)
 for i in range(n_tests_pagerank):
     steps = run_episode(env, agent_init_fn, policy=policy)
-    scores_pagerank[i] = steps
+    scores_pagerank[i] =  steps
 
 print("Score PageRank:" + str(np.mean(scores_pagerank)))
 
@@ -101,7 +103,7 @@ for i in range(n_gens):
     for j in range(n_tests_pagerank):
         agent_storage.new_episode()
         steps, observations, actions = run_episode(env, agent_storage.get_next_agent, policy=policy, return_details=True)
-        scores_pagerank_online_decentralized[i*n_tests_pagerank + j] = steps
+        scores_pagerank_online_decentralized[i*n_tests_pagerank + j] =  steps
     P = experiences / np.sum(experiences,(1))[:, np.newaxis, :]
     pagerank_policy = pagerank_method.optimize_value_iteration(P, env)
 
@@ -117,7 +119,7 @@ V = pagerank_method.optimize_value_iteration_values(P,env)
 observation_list = env.observation_list
 observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
 
-agent_storage = PermanentAgentStorage(env, QLearningConsensusAgent, None, policy=V)
+agent_storage = PermanentAgentStorage(env, QLearningConsensusAgent, None, policy=None)
 
 scores_Q_online_decentralized = np.zeros(n_tests_pagerank*n_gens)
 for i in range(n_gens):
@@ -128,7 +130,9 @@ for i in range(n_gens):
     # Generate Data
     for j in range(n_tests_pagerank):
         steps, observations, actions = run_episode(env, agent_storage.get_next_agent, policy=None, return_details=True)
-        scores_Q_online_decentralized[i*n_tests_pagerank + j] = steps
+        scores_Q_online_decentralized[i*n_tests_pagerank + j] =  steps
+        if j%10 == 0:
+            print(j+i*n_tests_pagerank)
 print("Done Q")
 
 # DynaQ online, decentralized
@@ -143,7 +147,7 @@ policy = pagerank_policy * (1 - randomness) + neutral_policy * randomness
 observation_list = env.observation_list
 observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
 
-agent_storage = PermanentAgentStorage(env, DynaQLearningConsensusAgent, None, policy=V)
+agent_storage = PermanentAgentStorage(env, ExpDynaQLearningConsensusAgent, experiences, policy=None)
 
 scores_DynaQ_online_decentralized = np.zeros(n_tests_pagerank*n_gens)
 for i in range(n_gens):
@@ -154,7 +158,7 @@ for i in range(n_gens):
     # Generate Data
     for j in range(n_tests_pagerank):
         steps, observations, actions = run_episode(env, agent_storage.get_next_agent, policy=None, return_details=True)
-        scores_DynaQ_online_decentralized[i*n_tests_pagerank + j] = steps
+        scores_DynaQ_online_decentralized[i*n_tests_pagerank + j] =  steps
         if j%10 == 0:
             print(j+i*n_tests_pagerank)
 
@@ -190,6 +194,6 @@ plt.plot(moving_average(scores_DynaQ_online_decentralized), linestyle='-', label
 # plt.plot(moving_average(scores_DynaQ_online_decentralized), linestyle='-', label="Dyna-Q-learning Online (Decentralized)")
 
 plt.legend()
-plt.ylabel("Steps until terminal")
+plt.ylabel("Mean steps until consensus")
 plt.xlabel("Episode")
 plt.show()

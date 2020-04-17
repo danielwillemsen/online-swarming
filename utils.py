@@ -15,8 +15,9 @@ def run_episode(env, agent_init_fn, policy=None, return_details=False):
 
     #Perform loop
     steps = 0
-
-    while not env.is_terminal():
+    steps_correct = 0
+    terminal = False
+    while not terminal:
         steps += 1
         joint_observation = env.get_joint_observation()
         # Every agent selects action:
@@ -29,6 +30,9 @@ def run_episode(env, agent_init_fn, policy=None, return_details=False):
                 actions[id].append(action)
         # Update environment
         env.step(joint_action)
+        terminal = env.is_terminal()
+        if terminal:
+            steps_correct += 1
     if return_details:
         joint_observation = env.get_joint_observation()
         for id, agent in agents.items():
