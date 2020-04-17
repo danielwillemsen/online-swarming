@@ -1,14 +1,13 @@
 from environments import ConsensusEnvironment
-from agents import ConsensusAgent
 from utils import run_episode
 import pagerank_method
 import matplotlib.pyplot as plt
 import numpy as np
 
 from agents import LearningConsensusAgent
-from agents import QLearningConsensusAgent
-from agents import DynaQLearningConsensusAgent
-from agents import ExpDynaQLearningConsensusAgent
+from agents import QLearningAgent
+from agents import DynaAgent
+from agents import ConsensusAgent
 
 from agents import PermanentAgentStorage
 
@@ -21,16 +20,15 @@ def moving_average(a, n=50) :
             b[i] = np.mean(a[0:i+1])
     return b
 
-n_agents = 12
+n_agents = 6
 n_opinions = 3
 
 randomness = 0.1
 n_tests_random = 5
 n_tests_pagerank = 100
-n_gens = 8
+n_gens = 3
 
 env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=False)
-agent_init_fn = ConsensusAgent
 P = pagerank_method.pagerank_find_P(env)
 pagerank_policy = pagerank_method.optimize_value_iteration(P, env)
 neutral_policy = pagerank_policy*0 + 1./n_opinions
@@ -48,7 +46,7 @@ policy = pagerank_policy * (1 - randomness) + neutral_policy * randomness
 
 scores_pagerank = np.zeros(n_tests_pagerank)
 for i in range(n_tests_pagerank):
-    steps = run_episode(env, agent_init_fn, policy=policy)
+    steps = run_episode(env, ConsensusAgent, policy=policy)
     scores_pagerank[i] =  steps
 
 print("Score PageRank:" + str(np.mean(scores_pagerank)))
@@ -70,7 +68,7 @@ for i in range(n_gens):
     steps_list = []
     # Generate Data
     for j in range(n_tests_pagerank):
-        steps, observations, actions = run_episode(env, agent_init_fn, policy=policy, return_details=True)
+        steps, observations, actions = run_episode(env, ConsensusAgent, policy=policy, return_details=True)
         for id, agent_observations in observations.items():
             for step, o_t in enumerate(agent_observations[:-1]):
                 o_t1 = agent_observations[step+1]
@@ -91,7 +89,7 @@ observation_list = env.observation_list
 observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
 
 #experiences = P*1000
-agent_storage = PermanentAgentStorage(env, LearningConsensusAgent, experiences, policy=policy)
+agent_storage = PermanentAgentStorage(env, LearningConsensusAgent, experiences=experiences, policy=policy)
 
 scores_pagerank_online_decentralized = np.zeros(n_tests_pagerank*n_gens)
 for i in range(n_gens):
@@ -102,7 +100,7 @@ for i in range(n_gens):
     # Generate Data
     for j in range(n_tests_pagerank):
         agent_storage.new_episode()
-        steps, observations, actions = run_episode(env, agent_storage.get_next_agent, policy=policy, return_details=True)
+        steps, observations, actions = run_episode(env, agent_storage.get_next_agent, return_details=True)
         scores_pagerank_online_decentralized[i*n_tests_pagerank + j] =  steps
     P = experiences / np.sum(experiences,(1))[:, np.newaxis, :]
     pagerank_policy = pagerank_method.optimize_value_iteration(P, env)
@@ -119,7 +117,7 @@ V = pagerank_method.optimize_value_iteration_values(P,env)
 observation_list = env.observation_list
 observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
 
-agent_storage = PermanentAgentStorage(env, QLearningConsensusAgent, None, policy=None)
+agent_storage = PermanentAgentStorage(env, QLearningAgent)
 
 scores_Q_online_decentralized = np.zeros(n_tests_pagerank*n_gens)
 for i in range(n_gens):
@@ -129,7 +127,7 @@ for i in range(n_gens):
     steps_list = []
     # Generate Data
     for j in range(n_tests_pagerank):
-        steps, observations, actions = run_episode(env, agent_storage.get_next_agent, policy=None, return_details=True)
+        steps, observations, actions = run_episode(env, agent_storage.get_next_agent, return_details=True)
         scores_Q_online_decentralized[i*n_tests_pagerank + j] =  steps
         if j%10 == 0:
             print(j+i*n_tests_pagerank)
@@ -147,7 +145,7 @@ policy = pagerank_policy * (1 - randomness) + neutral_policy * randomness
 observation_list = env.observation_list
 observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
 
-agent_storage = PermanentAgentStorage(env, ExpDynaQLearningConsensusAgent, experiences, policy=None)
+agent_storage = PermanentAgentStorage(env, DynaAgent, experiences=experiences)
 
 scores_DynaQ_online_decentralized = np.zeros(n_tests_pagerank*n_gens)
 for i in range(n_gens):
@@ -157,7 +155,7 @@ for i in range(n_gens):
     steps_list = []
     # Generate Data
     for j in range(n_tests_pagerank):
-        steps, observations, actions = run_episode(env, agent_storage.get_next_agent, policy=None, return_details=True)
+        steps, observations, actions = run_episode(env, agent_storage.get_next_agent, return_details=True)
         scores_DynaQ_online_decentralized[i*n_tests_pagerank + j] =  steps
         if j%10 == 0:
             print(j+i*n_tests_pagerank)

@@ -7,7 +7,7 @@ import numpy as np
 
 n_agents = 20
 n_opinions = 3
-env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=False)
+env = ConsensusEnvironment(n_agents=n_agents, n_actions=n_opinions, draw=False)
 agent_init_fn = ConsensusAgent
 
 ### Setup

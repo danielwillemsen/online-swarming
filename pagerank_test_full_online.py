@@ -1,6 +1,6 @@
 from environments import ConsensusEnvironment
 from agents import LearningConsensusAgent
-from agents import QLearningConsensusAgent
+from agents import QLearningAgent
 
 from agents import PermanentAgentStorage
 from utils import run_episode
@@ -10,7 +10,7 @@ import numpy as np
 
 n_agents = 10
 n_opinions = 3
-env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=False)
+env = ConsensusEnvironment(n_agents=n_agents, n_actions=n_opinions, draw=False)
 
 P = pagerank_method.pagerank_find_P(env)
 experiences = P*2000

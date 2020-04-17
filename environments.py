@@ -12,6 +12,7 @@ COLORS = ["r", "g", "b"]
 BLACK = (0,0,0)
 WHITE = (255,255,255)
 GREEN = (0,255,0)
+
 class PatternEnvironment:
     def __init__(self, type="square", size=2, draw=False):
         self.type = type
@@ -19,7 +20,7 @@ class PatternEnvironment:
         self.pattern = None
         self.n_agents = None
         self.setup_pattern()
-        self.n_opinions = 5
+        self.n_actions = 5
         self.n_neighbors_max = 8
         self.draw = draw
         self.size_grid = (self.n_agents + 1, self.n_agents + 1)
@@ -254,10 +255,11 @@ class PatternEnvironment:
                 self.n_agents = 9
                 self.pattern = np.array([[0,0,1,0,0],[0,1,1,1,0],[1,1,1,1,1]])
 
+
 class ConsensusEnvironment:
     def __init__(self, n_agents=5, n_opinions=3, draw=False):
         self.n_agents = n_agents
-        self.n_opinions = n_opinions
+        self.n_actions = n_opinions
         self.n_neighbors_max = min(8, n_agents - 1)
         self.draw = draw
         self.size_grid = (self.n_agents, self.n_agents)
@@ -284,7 +286,7 @@ class ConsensusEnvironment:
         observation_dict = {observation: idx for idx, observation in enumerate(self.observation_list)}
         n_observations = len(self.observation_list)
         s_des = []
-        r = np.zeros((n_observations, self.n_opinions))
+        r = np.zeros((n_observations, self.n_actions))
         for s1, s1_idx in observation_dict.items():
             arr = np.array(s1[1])
             if sum(arr > 0) == 1:
@@ -295,9 +297,9 @@ class ConsensusEnvironment:
 
     def create_observation_list(self):
         self.observation_list = []
-        combinations = [seq for seq in itertools.product([i for i in range(self.n_neighbors_max + 1)], repeat=self.n_opinions)
+        combinations = [seq for seq in itertools.product([i for i in range(self.n_neighbors_max + 1)], repeat=self.n_actions)
                         if sum(seq) > 0 and sum(seq) <= self.n_neighbors_max]
-        for opinion in range(self.n_opinions):
+        for opinion in range(self.n_actions):
             for comb in combinations:
                 self.observation_list.append((opinion,comb))
 
@@ -306,7 +308,7 @@ class ConsensusEnvironment:
         for agent_id in self.agent_ids:
             location = np.where(self.grid == agent_id)
             location = (int(location[0]), int(location[1]))
-            opinions_around = [0 for retval in range(self.n_opinions)]
+            opinions_around = [0 for retval in range(self.n_actions)]
             grid_around = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
             for agent_id_2 in grid_around.ravel():
                 if agent_id_2 and agent_id_2 != agent_id:
@@ -337,13 +339,13 @@ class ConsensusEnvironment:
         for agent in self.agent_ids:
             placed = False
             empty_indices = np.flatnonzero(self.grid_flat == 0)
-            self.opinions[agent] = np.random.randint(self.n_opinions)
+            self.opinions[agent] = np.random.randint(self.n_actions)
             while not placed:
                 index = np.random.choice(empty_indices)
                 self.grid_flat[index] = agent
                 location = np.where(self.grid == agent)
                 location = (int(location[0]), int(location[1]))
-                opinions_around = [0 for retval in range(self.n_opinions)]
+                opinions_around = [0 for retval in range(self.n_actions)]
                 grid_around = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
                 if np.sum(grid_around) != agent or agent == 1:
                     placed = True

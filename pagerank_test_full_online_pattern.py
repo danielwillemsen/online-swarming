@@ -1,6 +1,6 @@
 from environments import ConsensusEnvironment
 from agents import LearningConsensusAgent
-from agents import QLearningConsensusAgent
+from agents import QLearningAgent
 from agents import DynaQLearningConsensusAgent
 from agents import ExpDynaQLearningConsensusAgent
 

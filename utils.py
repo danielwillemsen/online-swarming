@@ -1,6 +1,7 @@
 import environments
 
-def run_episode(env, agent_init_fn, policy=None, return_details=False):
+
+def run_episode(env, agent_init_fn, return_details=False, **kwargs):
 
     # Initialization
     env.reset()
@@ -8,7 +9,7 @@ def run_episode(env, agent_init_fn, policy=None, return_details=False):
     observations = {}
     actions = {}
     for i in range(1, env.n_agents+1):
-        agents[i] = agent_init_fn(observation_list=env.observation_list, n_actions=env.n_opinions, policy=policy)
+        agents[i] = agent_init_fn(env, **kwargs)
         if return_details:
             observations[i] = []
             actions[i] = []
