@@ -4,6 +4,28 @@ import scipy.optimize as opt
 import mdptoolbox
 import time
 
+def pagerank_P_to_G(P, policy):
+    # G: S x S'
+    G = np.zeros((policy.shape[0], policy.shape[0]))
+    for s1 in range(policy.shape[0]):
+        for s2 in range(policy.shape[0]):
+            G[s1,s2] = policy[s1,:] @ P[s1,s2,:]
+    return G
+
+def fitness(P, policy, r):
+    G = pagerank_P_to_G(P, policy)
+    R = np.zeros((policy.shape[0]))+1./(policy.shape[0])
+    eta = 0.00001
+    converged = False
+    r = r[:,0]
+    while not converged:
+        R_new = (R @ G)
+        if np.linalg.norm(R_new-R) < eta:
+            converged = True
+        R = R_new
+    fitness = (R.T @ r)/np.sum(r)*policy.shape[0]
+    return fitness
+
 def pagerank_optimize_for_env(env):
     """ Optimizes pagerank for given environment. Assumes transitions according to paper
 
@@ -30,6 +52,7 @@ def optimize_value_iteration(P, env):
     policy = np.zeros((policy_ind.size, env.n_actions))
     policy[np.arange(policy_ind.size),policy_ind] = 1.0
     return policy
+
 
 def optimize_value_iteration_values(P, env):
     r = extract_localized_rewards(env)
@@ -69,7 +92,7 @@ def optimize_pagerank(P, env, regular=True):
     :param env: environment
     :return: optimized policy
     """
-    n_opinions=env.n_opinions
+    n_opinions=env.n_actions
     observation_list = env.observation_list
     observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
     n_observations = len(observation_list)
@@ -104,7 +127,7 @@ def optimize_pagerank(P, env, regular=True):
         beq = np.append(beq, beq2_row, 0)
     t1 = time.time()
     res = opt.linprog(-1 * r, A_eq=Aeq, b_eq=beq)
-    pi = np.reshape(res.x, (n_observations, 3), order="F")
+    pi = np.reshape(res.x, (n_observations, n_opinions), order="F")
     pi = pi / np.sum(pi, 1)[:, np.newaxis]
     print(time.time()-t1)
     return pi
@@ -132,6 +155,7 @@ def pagerank_find_P(env):
                     idx = np.where(diff == -1)
                     n_options = s1_arr[idx]
                     P_passive[s1_idx, s2_idx, :] = 1.0 / (sum(s1[1]) + 1) / (n_opinions - 1.0) * n_options
+    # Shape of P: S x S' x A
     P = P_active + P_passive
     return P
 
