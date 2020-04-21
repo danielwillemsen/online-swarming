@@ -37,7 +37,7 @@ neutral_policy = pagerank_policy*0 + 1./n_opinions
 G = pagerank_method.pagerank_P_to_G(P, pagerank_policy)
 r = pagerank_method.extract_localized_rewards(env)
 
-fitness = pagerank_method.fitness(P, neutral_policy, r)
+fitness = pagerank_method.fitness(P, pagerank_policy, r)
 # Random
 # scores_random = np.zeros(n_tests_random)
 # for i in range(n_tests_random):

@@ -18,9 +18,12 @@ def fitness(P, policy, r):
     eta = 0.00001
     converged = False
     r = r[:,0]
+    i = 0
     while not converged:
-        R_new = (R @ G)
-        if np.linalg.norm(R_new-R) < eta:
+        i = i+1
+        R_new = (G.T @ R)
+        res =  np.linalg.norm(R_new-R)
+        if res < eta:
             converged = True
         R = R_new
     fitness = (R.T @ r)/np.sum(r)*policy.shape[0]
@@ -138,11 +141,12 @@ def pagerank_find_P(env):
     observation_list = env.observation_list
     observation_dict = {observation: idx for idx, observation in enumerate(observation_list)}
     n_observations = len(observation_list)
+    r = extract_localized_rewards(env)
 
     P_active = np.zeros((n_observations, n_observations, n_opinions))
     for s1, s1_idx in observation_dict.items():
         for s2, s2_idx in observation_dict.items():
-            if s2[1] == s1[1]:
+            if s2[1] == s1[1] and not r[s1_idx,0] > 0.5:
                 P_active[s1_idx, s2_idx, s2[0]] = 1.0 / (sum(s1[1]) + 1)
     P_passive = np.zeros((n_observations, n_observations, n_opinions))
     for s1, s1_idx in observation_dict.items():
@@ -154,7 +158,14 @@ def pagerank_find_P(env):
                 if sum(abs(diff)) == 2 and sum(diff) == 0:
                     idx = np.where(diff == -1)
                     n_options = s1_arr[idx]
-                    P_passive[s1_idx, s2_idx, :] = 1.0 / (sum(s1[1]) + 1) / (n_opinions - 1.0) * n_options
+                    n_option2 = np.sum(s1_arr > 0 )
+                    if not r[s1_idx,0] > .1:
+                        # P_passive[s1_idx, s2_idx, :] = 1.0 / (sum(s1[1]) + 1) / (n_opinions - 1.0) * n_options
+                        P_passive[s1_idx, s2_idx, :] = (sum(s1[1])/(sum(s1[1]) + 1)) / n_option2
+                    else:
+                        # P_passive[s1_idx, s2_idx, :] = 1.0 / (sum(s1[1])) / (n_opinions - 1.0) * n_options
+                        P_passive[s1_idx, s2_idx, :] = 1.0 / n_option2
+
     # Shape of P: S x S' x A
     P = P_active + P_passive
     return P
