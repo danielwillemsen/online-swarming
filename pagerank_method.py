@@ -3,16 +3,54 @@ import numpy as np
 import scipy.optimize as opt
 import mdptoolbox
 import time
+from scipy.optimize import differential_evolution
+
+# def pagerank_P_to_G(P, policy):
+#     # G: S x S'
+#     G = np.zeros((policy.shape[0], policy.shape[0]))
+#     for s1 in range(policy.shape[0]):
+#         for s2 in range(policy.shape[0]):
+#             G[s1,s2] = policy[s1,:] @ P[s1,s2,:]
+#     return G
+
+# def pagerank_P_to_G(P, policy):
+#     # G: S x S'
+#     G = np.zeros((policy.shape[0], policy.shape[0]))
+#     for s2 in range(policy.shape[0]):
+#         G[:,s2] = policy[:,:] * P[:,s2,:]
+#     return G
+def init_Q(env, P):
+    Q = np.zeros((len(env.observation_list), env.n_actions))
+    r = extract_localized_rewards(env)
+    r = r[:,0]
+    for it in range(250):
+        Q_old = np.copy(Q)
+        for s in range(len(env.observation_list)):
+            for a in range(env.n_actions):
+                Q[s,a] = np.sum(P[s,:,a]*(r[:] + 0.99*np.max(Q_old, axis=1)))
+        # print(np.max(np.abs(Q - Q_old)))
+    return Q
 
 def pagerank_P_to_G(P, policy):
     # G: S x S'
-    G = np.zeros((policy.shape[0], policy.shape[0]))
-    for s1 in range(policy.shape[0]):
-        for s2 in range(policy.shape[0]):
-            G[s1,s2] = policy[s1,:] @ P[s1,s2,:]
+    G = np.sum(policy[:,:,np.newaxis] * np.swapaxes(P, 1, 2), axis=1)
     return G
 
-def fitness(P, policy, r):
+def optimize_GA(env, P):
+    r = extract_localized_rewards(env)
+    shape = (len(env.observation_list), env.n_actions)
+    bounds = [(0.01,1) for i in range(len(env.observation_list)*env.n_actions)]
+    res = differential_evolution(x_fitness,bounds,args=(shape, P, r), mutation=0.1, maxiter=20, tol=0.00001, disp=True)
+    pol = np.reshape(res.x,newshape=shape)
+    pol = pol/np.sum(pol,axis=1)[:, np.newaxis]
+    return pol
+
+def x_fitness(x, shape, P, r):
+    pol = np.reshape(x,newshape=shape)
+    pol = pol/np.sum(pol,axis=1)[:, np.newaxis]
+    return -fitness(pol, P, r)
+
+def fitness(policy, P, r):
     G = pagerank_P_to_G(P, policy)
     R = np.zeros((policy.shape[0]))+1./(policy.shape[0])
     eta = 0.00001
@@ -158,7 +196,7 @@ def pagerank_find_P(env):
                 if sum(abs(diff)) == 2 and sum(diff) == 0:
                     idx = np.where(diff == -1)
                     n_options = s1_arr[idx]
-                    n_option2 = np.sum(s1_arr > 0 )
+                    n_option2 = np.sum(s1_arr > 0 )*(n_opinions-1)
                     if not r[s1_idx,0] > .1:
                         # P_passive[s1_idx, s2_idx, :] = 1.0 / (sum(s1[1]) + 1) / (n_opinions - 1.0) * n_options
                         P_passive[s1_idx, s2_idx, :] = (sum(s1[1])/(sum(s1[1]) + 1)) / n_option2

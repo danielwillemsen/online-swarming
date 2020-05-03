@@ -13,6 +13,157 @@ BLACK = (0,0,0)
 WHITE = (255,255,255)
 GREEN = (0,255,0)
 
+class MultiAgentNavigation:
+    def __init__(self, size=4, n_agents=1, draw=False):
+        self.n_agents = n_agents
+        self.n_actions = 4
+        self.size_grid = (size,size)
+        self.agent_ids = [i for i in range(1, self.n_agents+1)]
+        self.draw = draw
+        self.grid_agents = np.zeros(self.size_grid, dtype=int)
+        self.grid_rewards = np.zeros(self.size_grid, dtype=int)
+        self.observation_list = None
+        self.observation_dict2 = {}
+
+        self.create_observation_list()
+        self.observation_dict = {observation: idx for idx, observation in enumerate(self.observation_list)}
+
+        self.agent_locations = {}
+        self.reward_locations = {}
+        self.terminal = False
+
+        if self.draw:
+            pygame.init()
+            self.gameDisplay = pygame.display.set_mode((800, 600))
+            self.gameDisplay.fill(WHITE)
+        self.reset()
+
+
+    def get_desired_observations(self):
+        observation_dict = {observation: idx for idx, observation in enumerate(self.observation_list)}
+        n_observations = len(self.observation_list)
+        s_des = []
+        r = np.zeros((n_observations, self.n_actions))
+        for s1, s1_idx in observation_dict.items():
+            obs = self.observation_dict2[s1]
+            if np.all(obs[0] == obs[1]):
+                r[s1_idx, :] = 1.0
+                s_des.append(s1)
+        return s_des
+
+    def step(self, joint_action):
+        for id in self.agent_ids:
+            if np.all(self.agent_locations[id] == self.reward_locations[id]):
+                self.terminal = True
+            # Right
+            if joint_action[id] == 0:
+                self.agent_locations[id][1] = min(self.agent_locations[id][1]+1, self.size_grid[1]-1)
+            if joint_action[id] == 1:
+                self.agent_locations[id][0] = min(self.agent_locations[id][0]+1, self.size_grid[0]-1)
+            if joint_action[id] == 2:
+                self.agent_locations[id][1] = max(self.agent_locations[id][1]-1, 0)
+            if joint_action[id] == 3:
+                self.agent_locations[id][0] = max(self.agent_locations[id][0]-1,0)
+        if self.draw:
+            self.update_plot()
+
+    def is_terminal(self):
+        if self.terminal:
+            return True
+        else:
+            return False
+
+    def create_observation_list(self):
+        observations_self = [np.zeros(self.size_grid)]
+        observations_self = []
+        observations_reward = []
+        # Own observations and rewards
+        for i in range(self.size_grid[0]*self.size_grid[1]):
+            temp = np.zeros(self.size_grid, dtype=int)
+            temp2 = np.zeros(self.size_grid, dtype=int)
+            temp.ravel()[i] = 1
+            temp2.ravel()[i] = 1
+
+            observations_self.append(temp)
+            observations_reward.append(temp2)
+
+        observations_others = []
+        for tup in itertools.product([i for i in range(self.size_grid[0]*self.size_grid[1])], repeat=self.n_agents-1):
+            temp = np.zeros(self.size_grid, dtype=int)
+            for ind in tup:
+                temp.ravel()[ind] = 1
+            observations_others.append(temp)
+        somelists = [observations_self, observations_reward, observations_others]
+        self.observation_list = []
+        self.observation_dict2 = {}
+        for seq in itertools.product(*somelists):
+            s = bytes()
+            for item in seq:
+                s = s + item.tostring()
+            self.observation_list.append(s)
+            self.observation_dict2[s] = seq
+
+        # self.observation_list = [seq for seq in itertools.product(*somelists)]
+        return
+
+    def reset(self):
+        self.grid_agents = np.zeros(self.size_grid, dtype=int)
+        self.grid_flat_agents = self.grid_agents.ravel()
+        self.opinions = dict()
+        self.terminal = False
+
+        # Place agents
+        for agent in self.agent_ids:
+            location0 = random.randrange(0, self.size_grid[0])
+            location1 = random.randrange(0, self.size_grid[1])
+            self.agent_locations[agent] = np.array([location0, location1], dtype=int)
+        # Place rewards
+        for agent in self.agent_ids:
+            location0 = random.randrange(0, self.size_grid[0])
+            location1 = random.randrange(0, self.size_grid[1])
+            self.reward_locations[agent] = np.array([location0, location1], dtype=int)
+        if self.draw:
+            self.update_plot()
+
+    def get_joint_observation(self):
+        joint_observation = {}
+        for agent in self.agent_ids:
+            observations_self = np.zeros(self.size_grid, dtype=int)
+            observations_self[tuple(self.agent_locations[agent])] = 1
+            observations_reward = np.zeros(self.size_grid, dtype=int)
+            observations_reward[tuple(self.reward_locations[agent])] = 1
+            observations_others = np.zeros(self.size_grid, dtype=int)
+            for agent2 in self.agent_ids:
+                if agent2 != agent:
+                    observations_others[tuple(self.agent_locations[agent2])] = 1
+            s = bytes()
+            for item in [observations_self, observations_reward, observations_others]:
+                s = s + item.tostring()
+            joint_observation[agent] = s
+                    # for agent in self.agent_ids:
+        #     location = np.ravel_multi_index(tuple(self.agent_locations[agent]), self.size_grid)
+        #     location_reward = np.ravel_multi_index(tuple(self.reward_locations[agent]), self.size_grid)
+        #     joint_observation[agent] = (location, location_reward)
+        return joint_observation
+
+    def update_plot(self, active_agent=None):
+        sleep = True
+        self.gameDisplay.fill(WHITE)
+        for agent in self.agent_ids:
+            location = tuple(self.agent_locations[agent])
+            location = (int(location[1])*50, int(location[0])*50)
+            pygame.draw.circle(self.gameDisplay, BLACK, location, 25)
+
+            location = tuple(self.reward_locations[agent])
+            location = (int(location[1])*50, int(location[0])*50)
+
+            pygame.draw.circle(self.gameDisplay, GREEN, location, 25)
+
+        pygame.display.update()
+        if sleep:
+            time.sleep(0.05)
+
+
 class PatternEnvironment:
     def __init__(self, type="square", size=2, draw=False):
         self.type = type
@@ -31,6 +182,7 @@ class PatternEnvironment:
         self.agent_ids = [i for i in range(1, self.n_agents+1)]
         self.fig = None
         self.ax = None
+
         if self.draw:
             pygame.init()
             self.gameDisplay = pygame.display.set_mode((800, 600))
@@ -121,7 +273,7 @@ class PatternEnvironment:
         if self.draw:
             self.update_plot()
 
-    def step(self, joint_action):
+    def step(self, joint_action, active_agent=None):
         """ Updates the environment based on a joint action. It randomly selects an action from one of the agents to
         execute.
 
@@ -129,7 +281,8 @@ class PatternEnvironment:
         :return:
         """
         # Select random agent and associated action
-        active_agent = np.random.choice(self.agent_ids)
+        if not active_agent:
+            active_agent = np.random.choice(self.agent_ids)
         action = joint_action[active_agent]
         location = np.where(self.grid == active_agent)
         location = (int(location[0]), int(location[1]))
@@ -257,8 +410,9 @@ class PatternEnvironment:
 
 
 class ConsensusEnvironment:
-    def __init__(self, n_agents=5, n_opinions=3, draw=False):
+    def __init__(self, n_agents=5, n_opinions=3, draw=False, DQN=False):
         self.n_agents = n_agents
+        self.DQN = DQN
         self.n_actions = n_opinions
         self.n_neighbors_max = min(8, n_agents - 1)
         self.draw = draw
@@ -269,9 +423,12 @@ class ConsensusEnvironment:
         self.observation_list = []
         self.create_observation_list()
         self.agent_ids = [i for i in range(1, self.n_agents+1)]
-
+        self.desired_observations = self.get_desired_observations()
         self.fig = None
         self.ax = None
+        self.current_observation = None
+        self.extended_observation = None
+
         if self.draw:
             plt.ion()
             self.fig = plt.figure()
@@ -305,15 +462,34 @@ class ConsensusEnvironment:
 
     def get_joint_observation(self):
         observation = {}
+        extended_observation = {}
         for agent_id in self.agent_ids:
             location = np.where(self.grid == agent_id)
             location = (int(location[0]), int(location[1]))
+            down,up,right,left = 0,0,0,0
+            if location[0] == self.size_grid[0] - 1:
+                down = 1
+            if location[0] == 0:
+                up = 1
+            if location[1] == self.size_grid[1] - 1:
+                right = 1
+            if location[1] == 0:
+                left = 1
             opinions_around = [0 for retval in range(self.n_actions)]
-            grid_around = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
-            for agent_id_2 in grid_around.ravel():
+            # grid_around = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
+            grid_around = np.zeros((3,3))
+            grid_around[0+up:3-down,0+left:3-right] = self.grid[max(location[0]-1,0):min(location[0]+2,self.size_grid[0]), max(location[1]-1,0):min(location[1]+2,self.size_grid[1])]
+
+            extended_obs_agent = np.zeros((3,3))
+            for index, agent_id_2 in enumerate(grid_around.ravel()):
+                if agent_id_2:
+                    extended_obs_agent[np.unravel_index(index,(3,3))] = self.opinions[agent_id_2]+1
                 if agent_id_2 and agent_id_2 != agent_id:
                     opinions_around[self.opinions[agent_id_2]] += 1
+            extended_observation[agent_id] = extended_obs_agent
             observation[agent_id] = ((self.opinions[agent_id], tuple(opinions_around)))
+        self.current_observation = observation
+        self.extended_observation = extended_observation
         return observation
 
     def is_terminal(self):
@@ -329,6 +505,7 @@ class ConsensusEnvironment:
         self.grid = np.zeros(self.size_grid, dtype=int)
         self.grid_flat = self.grid.ravel()
         self.opinions = dict()
+        self.current_observation = None
         if self.draw:
             self.fig = plt.figure()
             self.ax = self.fig.add_subplot(111)
@@ -354,7 +531,7 @@ class ConsensusEnvironment:
         if self.draw:
             self.update_plot()
 
-    def step(self, joint_action):
+    def step(self, joint_action, active_agent=None):
         """ Updates the environment based on a joint action. It randomly selects an action from one of the agents to
         execute.
 
@@ -362,9 +539,11 @@ class ConsensusEnvironment:
         :return:
         """
         # Select random agent and associated action
-        active_agent = np.random.choice(self.agent_ids)
+        if not active_agent:
+            active_agent = np.random.choice(self.agent_ids)
         action = joint_action[active_agent]
-        self.opinions[active_agent] = action
+        if not self.current_observation[active_agent] in self.desired_observations:
+            self.opinions[active_agent] = action
         if self.draw:
             self.update_plot()
         return self.get_joint_observation()

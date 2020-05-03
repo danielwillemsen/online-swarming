@@ -20,24 +20,31 @@ def moving_average(a, n=50) :
             b[i] = np.mean(a[0:i+1])
     return b
 
+
 n_agents = 10
 n_opinions = 2
 
-randomness = 0.1
+randomness = 0.20
 n_tests_random = 5
 n_tests_pagerank = 100
 n_gens = 5
 
 env = ConsensusEnvironment(n_agents=n_agents, n_opinions=n_opinions, draw=False)
 P = pagerank_method.pagerank_find_P(env)
-policy = pagerank_method.pagerank_optimize_for_env(env)
-pagerank_policy = pagerank_method.optimize_value_iteration(P, env)
-neutral_policy = pagerank_policy*0 + 1./n_opinions
 
-G = pagerank_method.pagerank_P_to_G(P, pagerank_policy)
+# for b in range(100):
+#     r = pagerank_method.extract_localized_rewards(env)
+#     shape = (len(env.observation_list), env.n_actions)
+#     bounds = [(0,1) for i in range(len(env.observation_list)*env.n_actions)]
+#     x = np.zeros((env.n_actions*len(env.observation_list)))+ 1./n_opinions
+#     pagerank_method.x_fitness(x, shape, P, r)
+
+
+GA_policy = pagerank_method.optimize_GA(env, P)
+
 r = pagerank_method.extract_localized_rewards(env)
+print("Pagerank GA fitness:" + str(pagerank_method.fitness(GA_policy, P, r)))
 
-fitness = pagerank_method.fitness(P, pagerank_policy, r)
 # Random
 # scores_random = np.zeros(n_tests_random)
 # for i in range(n_tests_random):
@@ -46,13 +53,26 @@ fitness = pagerank_method.fitness(P, pagerank_policy, r)
 #
 # print("Score Random:" + str(np.mean(scores_random)))
 
+# GA Policy:
+scores_GA_pagerank = np.zeros(n_tests_pagerank)
+for i in range(n_tests_pagerank):
+    steps = run_episode(env, ConsensusAgent, policy=GA_policy)
+    scores_GA_pagerank[i] = steps
+
+print("Score GA:" + str(np.mean(scores_GA_pagerank)))
+
+policy = pagerank_method.pagerank_optimize_for_env(env)
+pagerank_policy = pagerank_method.optimize_value_iteration(P, env)
+neutral_policy = pagerank_policy*0 + 1./n_opinions
+
 # PageRank DP + 10% Random
 policy = pagerank_policy * (1 - randomness) + neutral_policy * randomness
+fitness = pagerank_method.fitness(pagerank_policy, P, r)
 
 scores_pagerank = np.zeros(n_tests_pagerank)
 for i in range(n_tests_pagerank):
     steps = run_episode(env, ConsensusAgent, policy=policy)
-    scores_pagerank[i] =  steps
+    scores_pagerank[i] = steps
 
 print("Score PageRank:" + str(np.mean(scores_pagerank)))
 
